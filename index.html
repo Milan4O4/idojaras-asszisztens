@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Budapest időjárás asszisztens</title>
+
+  <!-- Favicon (inline SVG data URL) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M20 40c0-6 5-11 11-11 2 0 4 .5 5.7 1.5C38.5 26.2 42 23 46.5 23 52 23 56 27.2 56 32.5S52 42 46.5 42H22.5C21 42 20 41 20 40z' fill='%232a8cff'/%3E%3Ccircle cx='23' cy='23' r='9' fill='%23ffd24d'/%3E%3C/svg%3E" />
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#0f1a2f;
+      --line:#22304a;
+      --muted:#a9b7d6;
+      --chip:#142445;
+      --txt:#e8eefc;
+
+      --ok:#27d17f;
+      --warn:#ffb84d;
+      --hot:#ff5c5c;
+      --cold:#6aa8ff;
+      --rain:#42d6a4;
+      --wind:#ffa24d;
+      --snow:#b5d8ff;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:system-ui, Segoe UI, Arial;
+      background:var(--bg);
+      color:var(--txt);
+    }
+    .app{ max-width:1000px; margin:0 auto; padding:24px; }
+    h1{ margin:0 0 8px; font-size:28px; }
+    .sub{ margin:0 0 18px; color:var(--muted); }
+    .bar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+    select, button{
+      border:1px solid var(--line);
+      background:var(--card);
+      color:var(--txt);
+      border-radius:12px;
+      padding:12px 14px;
+      font-size:14px;
+    }
+    select{ min-width:360px; flex:1; }
+    button{ cursor:pointer; }
+    button:hover{ filter:brightness(1.1); }
+    .btnGhost{ background:transparent; }
+    .grid{ display:grid; grid-template-columns:1fr; gap:12px; }
+    .card{ border:1px solid var(--line); background:var(--card); border-radius:16px; padding:14px; }
+    .card h2{ margin:0 0 10px; font-size:16px; }
+    .muted{ color:var(--muted); }
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid var(--line);
+      background:var(--chip);
+      border-radius:999px;
+      padding:7px 10px;
+      font-size:13px;
+    }
+    .chip button{
+      padding:0; border:0; background:transparent; color:var(--muted);
+      border-radius:8px; font-size:14px; line-height:1; cursor:pointer;
+    }
+    .chip button:hover{ color:var(--txt); filter:none; }
+
+    .pills{ display:flex; flex-wrap:wrap; gap:8px; }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px;
+      border:1px solid var(--line); background:var(--chip);
+      font-size:13px;
+    }
+    .pill .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; }
+    .dot-ok{ background:var(--ok); }
+    .dot-hot{ background:var(--hot); }
+    .dot-cold{ background:var(--cold); }
+    .dot-rain{ background:var(--rain); }
+    .dot-wind{ background:var(--wind); }
+    .dot-snow{ background:var(--snow); }
+    .dot-warn{ background:var(--warn); }
+
+    hr{ border:0; border-top:1px solid var(--line); margin:14px 0; }
+    pre{
+      margin:0;
+      white-space:pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color:#d7e2ff;
+    }
+    ul{ margin:0; padding-left:18px; }
+    .row2{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .err{ color:#ffd5d5; }
+    .topRow{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .statusLine{ color:var(--muted); font-size:13px; }
+
+    /* ====== PRINT (nyomtatható jelentés) ====== */
+    @media print {
+      body{ background:#fff; color:#000; }
+      .app{ max-width:none; padding:0; }
+      .bar, #installHint { display:none !important; }
+      .card{ border:1px solid #ddd; background:#fff; border-radius:0; }
+      .muted{ color:#444; }
+      pre{ color:#000; }
+      .pill{ border:1px solid #ddd; background:#fff; }
+      .chip{ border:1px solid #ddd; background:#fff; }
+    }
+  </style>
+</head>
+
+<body>
+<main class="app">
+  <div class="topRow">
+    <div>
+      <h1>Budapest időjárás asszisztens (3 nap)</h1>
+      <p class="sub">Kerületekre bontott előrejelzés. Forrás: Open-Meteo (API kulcs nélkül).</p>
+    </div>
+    <div class="statusLine" id="statusLine"></div>
+  </div>
+
+  <div class="bar">
+    <select id="districtSelect" aria-label="Kerület kiválasztása"></select>
+    <button id="addBtn" type="button">+ Hozzáadás</button>
+    <button id="refreshBtn" type="button">Frissítés</button>
+    <button id="resetBtn" type="button">Alap</button>
+    <button id="printBtn" type="button" class="btnGhost">Nyomtatás / PDF</button>
+  </div>
+
+  <div id="installHint" class="card" style="display:none;">
+    <h2>App telepítés</h2>
+    <p class="muted" style="margin:0;">
+      Tipp: ha ezt az oldalt <b>HTTP-n</b> nyitod (pl. VS Code Live Server), akkor Edge/Chrome-ban megjelenik az
+      <b>Install app</b> lehetőség (Start menü ikon, külön ablak).
+    </p>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Figyelt kerületek</h2>
+      <div id="watchChips" class="chips"></div>
+      <p id="watchHint" class="muted" style="margin:10px 0 0;"></p>
+    </section>
+
+    <section class="card">
+      <h2>Riasztások</h2>
+      <div id="alerts"></div>
+    </section>
+
+    <section class="card">
+      <h2>Tippek</h2>
+      <div id="tips"></div>
+    </section>
+
+    <section class="card">
+      <h2>Előrejelzés</h2>
+      <div id="forecast"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ===================== Kerületek (név + koordináta) ===================== */
+const DISTRICTS = [
+  { key:"01", label:"I. kerület – Vár", lat:47.4979, lon:19.0402 },
+  { key:"02", label:"II. kerület – Rózsadomb", lat:47.5396, lon:19.0232 },
+  { key:"03", label:"III. kerület – Óbuda", lat:47.5416, lon:19.0456 },
+  { key:"04", label:"IV. kerület – Újpest", lat:47.5619, lon:19.0897 },
+  { key:"05", label:"V. kerület – Belváros-Lipótváros", lat:47.4975, lon:19.0553 },
+  { key:"06", label:"VI. kerület – Terézváros", lat:47.5071, lon:19.0655 },
+  { key:"07", label:"VII. kerület – Erzsébetváros", lat:47.4998, lon:19.0709 },
+  { key:"08", label:"VIII. kerület – Józsefváros", lat:47.4892, lon:19.0701 },
+  { key:"09", label:"IX. kerület – Ferencváros", lat:47.4767, lon:19.0709 },
+  { key:"10", label:"X. kerület – Kőbánya", lat:47.4790, lon:19.1580 },
+  { key:"11", label:"XI. kerület – Újbuda", lat:47.4765, lon:19.0460 },
+  { key:"12", label:"XII. kerület – Hegyvidék", lat:47.5014, lon:19.0257 },
+  { key:"13", label:"XIII. kerület – Angyalföld", lat:47.5325, lon:19.0661 },
+  { key:"14", label:"XIV. kerület – Zugló", lat:47.5183, lon:19.1095 },
+  { key:"15", label:"XV. kerület – Rákospalota–Pestújhely–Újpalota", lat:47.5602, lon:19.1169 },
+  { key:"16", label:"XVI. kerület – Mátyásföld", lat:47.5148, lon:19.1706 },
+  { key:"17", label:"XVII. kerület – Rákosmente", lat:47.4806, lon:19.2539 },
+  { key:"18", label:"XVIII. kerület – Pestszentlőrinc–Pestszentimre", lat:47.4314, lon:19.2014 },
+  { key:"19", label:"XIX. kerület – Kispest", lat:47.4526, lon:19.1491 },
+  { key:"20", label:"XX. kerület – Pesterzsébet", lat:47.4265, lon:19.1074 },
+  { key:"21", label:"XXI. kerület – Csepel", lat:47.4304, lon:19.0705 },
+  { key:"22", label:"XXII. kerület – Budafok-Tétény", lat:47.4308, lon:19.0394 },
+  { key:"23", label:"XXIII. kerület – Soroksár", lat:47.3946, lon:19.1141 },
+];
+
+/* ===================== Küszöbök / beállítások ===================== */
+const LIMITS = {
+  rain_mm_day: 8,
+  snow_mm_day: 2,
+  wind_ms: 12,
+  frost_c: 0,
+  cold_c: -8,
+  heat_c: 30,
+};
+
+const STORE_KEY = "bp_watch_districts_ultimate_v1";
+const DEFAULT_WATCH = ["11"];            // alap: XI. kerület
+const AUTO_REFRESH_MIN = 60;             // óránként frissít
+let autoTimer = null;
+let nextRefreshAt = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+
+function districtByKey(key){ return DISTRICTS.find(d => d.key === key); }
+
+function loadWatch(){
+  try{
+    const v = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (Array.isArray(v) && v.length) return v.filter(k => typeof k === "string" && districtByKey(k));
+  }catch{}
+  return [...DEFAULT_WATCH];
+}
+function saveWatch(keys){ localStorage.setItem(STORE_KEY, JSON.stringify(keys)); }
+
+/* ===================== PWA install (manifest blob) ===================== */
+function setupManifest(){
+  // Egyszerű inline ikon (SVG) data URL
+  const iconSvg =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M20 40c0-6 5-11 11-11 2 0 4 .5 5.7 1.5C38.5 26.2 42 23 46.5 23 52 23 56 27.2 56 32.5S52 42 46.5 42H22.5C21 42 20 41 20 40z' fill='%232a8cff'/%3E%3Ccircle cx='23' cy='23' r='9' fill='%23ffd24d'/%3E%3C/svg%3E";
+
+  const manifest = {
+    name: "Budapest időjárás asszisztens",
+    short_name: "BP Időjárás",
+    start_url: "./",
+    display: "standalone",
+    background_color: "#0b1220",
+    theme_color: "#0b1220",
+    icons: [
+      { src: iconSvg, sizes: "64x64", type: "image/svg+xml", purpose: "any" }
+    ]
+  };
+
+  const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = url;
+  document.head.appendChild(link);
+
+  // install hint (főleg file:// eset)
+  const isHttp = location.protocol === "http:" || location.protocol === "https:";
+  $("installHint").style.display = isHttp ? "none" : "block";
+}
+
+/* ===================== UI: select + chips ===================== */
+function buildSelect(){
+  const sel = $("districtSelect");
+  sel.innerHTML = "";
+  for (const d of DISTRICTS){
+    const opt = document.createElement("option");
+    opt.value = d.key;
+    opt.textContent = d.label;
+    sel.appendChild(opt);
+  }
+  sel.value = DEFAULT_WATCH[0];
+}
+
+function renderWatchChips(keys){
+  const wrap = $("watchChips");
+  wrap.innerHTML = "";
+
+  for (const k of keys){
+    const d = districtByKey(k);
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.innerHTML = `<span>${esc(d.label)}</span>`;
+
+    const x = document.createElement("button");
+    x.type = "button";
+    x.title = "Eltávolítás";
+    x.textContent = "✕";
+    x.onclick = () => {
+      const next = keys.filter(v => v !== k);
+      saveWatch(next.length ? next : [...DEFAULT_WATCH]);
+      refreshAll();
+    };
+
+    chip.appendChild(x);
+    wrap.appendChild(chip);
+  }
+
+  $("watchHint").textContent = "Válassz kerületet → „+ Hozzáadás”. (X-szel törölhető.)";
+}
+
+/* ===================== Adat: Open-Meteo napi 3 nap ===================== */
+async function fetchForecast3Days(lat, lon){
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,wind_speed_10m_max&timezone=auto`;
+
+  const r = await fetch(url, { cache: "no-store" });
+  const json = await r.json();
+
+  if (!json.daily) throw new Error("Nem jött vissza előrejelzés (nincs napi adat).");
+  const d = json.daily;
+
+  return d.time.slice(0,3).map((t,i)=>({
+    date:t,
+    tmax:d.temperature_2m_max[i],
+    tmin:d.temperature_2m_min[i],
+    rain:d.precipitation_sum[i],
+    snow:d.snowfall_sum[i],
+    wind_ms:d.wind_speed_10m_max[i]/3.6, // km/h -> m/s
+  }));
+}
+
+/* ===================== Logika: riasztások + színezés ===================== */
+function computeAlerts(days){
+  const a = new Set();
+  for (const x of days){
+    if (x.rain >= LIMITS.rain_mm_day) a.add("🌧 Erős eső");
+    if (x.snow >= LIMITS.snow_mm_day) a.add("❄ Havazás");
+    if (x.tmin <= LIMITS.frost_c) a.add("🧊 Fagyveszély");
+    if (x.tmin <= LIMITS.cold_c) a.add("🥶 Extrém hideg");
+    if (x.tmax >= LIMITS.heat_c) a.add("🔥 Hőség");
+    if (x.wind_ms >= LIMITS.wind_ms) a.add("💨 Erős szél");
+  }
+  return [...a];
+}
+
+function alertDotClass(alertText){
+  if (alertText.includes("Hőség")) return "dot-hot";
+  if (alertText.includes("Extrém hideg")) return "dot-cold";
+  if (alertText.includes("Fagyveszély")) return "dot-cold";
+  if (alertText.includes("Erős eső")) return "dot-rain";
+  if (alertText.includes("Havazás")) return "dot-snow";
+  if (alertText.includes("Erős szél")) return "dot-wind";
+  return "dot-warn";
+}
+
+function buildTips(allDays, allAlerts){
+  const avg = allDays.reduce((s,d)=>s + (d.tmin+d.tmax)/2,0) / Math.max(allDays.length,1);
+  const tips = [];
+  if (avg < 5) tips.push("🧥 Meleg öltözet ajánlott (réteges).");
+  if (avg > 25) tips.push("🧢 Napvédelem + sok folyadék.");
+  if (allAlerts.includes("🌧 Erős eső")) tips.push("☔ Kültéri munka/program halasztása hasznos lehet.");
+  if (allAlerts.includes("🧊 Fagyveszély")) tips.push("🌱 Növények védelme javasolt (takarás).");
+  if (allAlerts.includes("💨 Erős szél")) tips.push("🏗 Kültéri tárgyak rögzítése (szék, fólia, stb.).");
+  return tips.length ? tips : ["Nincs külön ajánlás."];
+}
+
+/* ===================== Render: riasztás + tippek + forecast ===================== */
+function renderAlerts(per){
+  const all = [...new Set(per.flatMap(x => x.alerts))];
+  if (!all.length) return `<div class="pills"><span class="pill"><span class="dot dot-ok"></span>Nincs riasztás</span></div>`;
+
+  const summary = all.map(a => `
+    <span class="pill"><span class="dot ${alertDotClass(a)}"></span>${esc(a)}</span>
+  `).join("");
+
+  const details = per
+    .filter(x => x.alerts.length)
+    .map(x => `<div class="muted" style="margin-top:10px;"><b>${esc(x.label)}</b>: ${esc(x.alerts.join(", "))}</div>`)
+    .join("");
+
+  return `<div class="pills">${summary}</div>${details}`;
+}
+
+function renderTips(tips){
+  return `<ul>${tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
+}
+
+function renderForecast(per){
+  return per.map((x, idx) => {
+    const lines = x.days.map(d =>
+      `${d.date}: min ${Math.round(d.tmin)}°C / max ${Math.round(d.tmax)}°C | csapadék ${Math.round(d.rain)}mm | hó ${Math.round(d.snow)}mm | szél ${d.wind_ms.toFixed(1)} m/s`
+    ).join("\n");
+
+    return `
+      ${idx ? "<hr>" : ""}
+      <div class="row2">
+        <div><b>${esc(x.label)}</b></div>
+        <div class="muted">Riasztás: ${esc(x.alerts.length ? x.alerts.join(", ") : "Nincs")}</div>
+      </div>
+      <pre style="margin-top:10px;">${esc(lines)}</pre>
+    `;
+  }).join("");
+}
+
+/* ===================== Status line (auto refresh countdown) ===================== */
+function fmt2(n){ return String(n).padStart(2,"0"); }
+
+function updateStatusLine(){
+  const el = $("statusLine");
+  if (!nextRefreshAt){
+    el.textContent = `Auto frissítés: ${AUTO_REFRESH_MIN} percenként`;
+    return;
+  }
+  const now = Date.now();
+  const ms = Math.max(0, nextRefreshAt - now);
+  const totalSec = Math.floor(ms/1000);
+  const mm = Math.floor(totalSec/60);
+  const ss = totalSec % 60;
+  el.textContent = `Auto frissítés: ${AUTO_REFRESH_MIN} percenként • Következő: ${fmt2(mm)}:${fmt2(ss)}`;
+}
+
+/* ===================== Main refresh ===================== */
+async function refreshAll(){
+  const watchKeys = loadWatch();
+  renderWatchChips(watchKeys);
+
+  $("alerts").innerHTML = `<p class="muted">Betöltés...</p>`;
+  $("tips").innerHTML = `<p class="muted">Betöltés...</p>`;
+  $("forecast").innerHTML = `<p class="muted">Betöltés...</p>`;
+
+  try{
+    const per = [];
+    for (const k of watchKeys){
+      const d = districtByKey(k);
+      const days = await fetchForecast3Days(d.lat, d.lon);
+      const alerts = computeAlerts(days);
+      per.push({ key:k, label:d.label, days, alerts });
+    }
+
+    $("alerts").innerHTML = renderAlerts(per);
+
+    const allDays = per.flatMap(x => x.days);
+    const allAlerts = [...new Set(per.flatMap(x => x.alerts))];
+    $("tips").innerHTML = renderTips(buildTips(allDays, allAlerts));
+
+    $("forecast").innerHTML = renderForecast(per);
+
+  }catch(err){
+    $("alerts").innerHTML =
+      `<p class="err"><b>Hiba:</b> ${esc(err.message || err)}</p>
+       <p class="muted">Ellenőrizd, hogy van-e internet, majd nyomj Frissítést.</p>`;
+    $("tips").innerHTML = "";
+    $("forecast").innerHTML = "";
+  }
+}
+
+/* ===================== Actions ===================== */
+function addSelected(){
+  const key = $("districtSelect").value;
+  const watch = loadWatch();
+  if (!watch.includes(key)){
+    watch.push(key);
+    saveWatch(watch);
+  }
+  refreshAll();
+}
+function resetDefault(){
+  saveWatch([...DEFAULT_WATCH]);
+  $("districtSelect").value = DEFAULT_WATCH[0];
+  refreshAll();
+}
+
+/* ===================== Auto refresh ===================== */
+function startAutoRefresh(){
+  if (autoTimer) clearInterval(autoTimer);
+
+  const intervalMs = AUTO_REFRESH_MIN * 60 * 1000;
+  nextRefreshAt = Date.now() + intervalMs;
+
+  autoTimer = setInterval(async () => {
+    await refreshAll();
+    nextRefreshAt = Date.now() + intervalMs;
+  }, intervalMs);
+
+  // külön “visszaszámláló” frissítés
+  setInterval(updateStatusLine, 1000);
+  updateStatusLine();
+}
+
+/* ===================== Print ===================== */
+function printReport(){
+  // Nyomtatásnál a CSS @media print elintézi, mit rejtsünk el
+  window.print();
+}
+
+/* ===================== INIT ===================== */
+setupManifest();
+buildSelect();
+
+$("addBtn").onclick = addSelected;
+$("refreshBtn").onclick = refreshAll;
+$("resetBtn").onclick = resetDefault;
+$("printBtn").onclick = printReport;
+
+refreshAll();
+startAutoRefresh();
+</script>
+</body>
+</html>
